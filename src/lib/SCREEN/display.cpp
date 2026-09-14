@@ -116,6 +116,15 @@ static const char *rate_string[] = {
     "X150Hz",
     "X100Full"
 };
+#elif defined(RADIO_SX126X)
+static const char *rate_string[] = {
+    "200Hz",
+    "100 Full",
+    "100Hz",
+    "50Hz",
+    "25Hz",
+    "D50Hz"
+};
 #endif
 
 static const char *switch_mode[] = {

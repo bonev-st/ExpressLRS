@@ -15,6 +15,8 @@
 #include "LR1121Driver.h"
 #elif defined(RADIO_LR2021)
 #include "LR2021Driver.h"
+#elif defined(RADIO_SX126X)
+#include "SX126xDriver.h"
 #else
 #error Invalid radio configuration!
 #endif

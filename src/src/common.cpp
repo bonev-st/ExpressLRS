@@ -161,6 +161,29 @@ expresslrs_rf_pref_params_s ExpressLRS_AirRateRFperf[RATE_MAX] = {
     {23, -112,  7456, 3500, 2500,  11,  5000, SNR_SCALE( 0), SNR_SCALE(8.5)}};
 #endif
 
+#if defined(RADIO_SX126X)
+
+#include "SX126xDriver.h"
+SX126xDriver Radio;
+
+expresslrs_mod_settings_s ExpressLRS_AirRateConfig[RATE_MAX] = {
+    {0, RadioBandMod::Combined::LORA_900, RATE_LORA_900_200HZ,     SX126X_BW_500_00_KHZ, SX126X_SF_6, SX126X_CR_4_7,  8, TLM_RATIO_1_64, 4,  5000, OTA4_PACKET_SIZE, 1},
+    {1, RadioBandMod::Combined::LORA_900, RATE_LORA_900_100HZ_8CH, SX126X_BW_500_00_KHZ, SX126X_SF_6, SX126X_CR_4_8,  8, TLM_RATIO_1_32, 4, 10000, OTA8_PACKET_SIZE, 1},
+    {2, RadioBandMod::Combined::LORA_900, RATE_LORA_900_100HZ,     SX126X_BW_500_00_KHZ, SX126X_SF_7, SX126X_CR_4_7,  8, TLM_RATIO_1_32, 4, 10000, OTA4_PACKET_SIZE, 1},
+    {3, RadioBandMod::Combined::LORA_900, RATE_LORA_900_50HZ,      SX126X_BW_500_00_KHZ, SX126X_SF_8, SX126X_CR_4_7, 10, TLM_RATIO_1_16, 4, 20000, OTA4_PACKET_SIZE, 1},
+    {4, RadioBandMod::Combined::LORA_900, RATE_LORA_900_25HZ,      SX126X_BW_500_00_KHZ, SX126X_SF_9, SX126X_CR_4_7, 10, TLM_RATIO_1_8,  2, 40000, OTA4_PACKET_SIZE, 1},
+    {5, RadioBandMod::Combined::LORA_900, RATE_LORA_900_50HZ_DVDA, SX126X_BW_500_00_KHZ, SX126X_SF_6, SX126X_CR_4_7,  8, TLM_RATIO_1_64, 2,  5000, OTA4_PACKET_SIZE, 4}};
+
+expresslrs_rf_pref_params_s ExpressLRS_AirRateRFperf[RATE_MAX] = {
+    {0, -112,  4380, 3000, 2500, 600, 5000, SNR_SCALE( 1), SNR_SCALE(3.0)},
+    {1, -112,  6690, 3500, 2500, 600, 5000, SNR_SCALE( 1), SNR_SCALE(3.0)},
+    {2, -117,  8770, 3500, 2500, 600, 5000, SNR_SCALE( 1), SNR_SCALE(2.5)},
+    {3, -120, 18560, 4000, 2500, 600, 5000, SNR_SCALE(-1), SNR_SCALE(1.5)},
+    {4, -123, 29950, 6000, 4000, 600, 5000, SNR_SCALE(-3), SNR_SCALE(0.5)},
+    {5, -112,  4380, 3000, 2500, 600, 5000, SNR_SCALE( 1), SNR_SCALE(3.0)}};
+#endif
+
+
 expresslrs_mod_settings_s *get_elrs_airRateConfig(uint8_t index)
 {
     if (RATE_MAX <= index)

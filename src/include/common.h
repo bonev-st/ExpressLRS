@@ -13,6 +13,8 @@
 #include "LR1121Driver.h"
 #elif defined(RADIO_LR2021)
 #include "LR2021Driver.h"
+#elif defined(RADIO_SX126X)
+#include "SX126xDriver.h"
 #else
 #error "Radio configuration is not valid!"
 #endif
@@ -298,6 +300,12 @@ extern LR1121Driver Radio;
 #define RATE_DUALBAND_BINDING RATE_LORA_2G4_50HZ
 
 extern LR2021Driver Radio;
+
+#elif defined(RADIO_SX126X)
+#define RATE_MAX 6
+#define RATE_BINDING RATE_LORA_900_50HZ
+
+extern SX126xDriver Radio; 
 
 #endif
 #endif // UNIT_TEST

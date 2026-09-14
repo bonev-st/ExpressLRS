@@ -15,6 +15,8 @@
 extern SX127xDriver Radio;
 #elif defined(RADIO_SX128X)
 extern SX1280Driver Radio;
+#elif defined(RADIO_SX126X)
+extern SX126xDriver Radio;
 #endif
 
 WiFiUDP *WifiJoystick::udp = NULL;

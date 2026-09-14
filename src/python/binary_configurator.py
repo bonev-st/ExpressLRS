@@ -47,6 +47,9 @@ def generateUID(phrase):
 def FREQ_HZ_TO_REG_VAL_SX127X(freq):
     return int(freq/61.03515625)
 
+def FREQ_HZ_TO_REG_VAL_SX126X(freq):
+    return int(freq/61.03515625)
+
 def FREQ_HZ_TO_REG_VAL_SX1280(freq):
     return int(freq/(52000000.0/pow(2,18)))
 
@@ -203,7 +206,7 @@ def main():
     parser.add_argument('--tlm-report', type=int, const=240, nargs='?', action='store', help='The interval (in milliseconds) between telemetry packets')
     parser.add_argument('--fan-min-runtime', type=int, const=30, nargs='?', action='store', help='The minimum amount of time the fan should run for (in seconds) if it turns on')
     # Regulatory domain
-    parser.add_argument('--domain', type=RegulatoryDomain, choices=list(RegulatoryDomain), default=None, help='For SX127X based devices, which regulatory domain is being used')
+    parser.add_argument('--domain', type=RegulatoryDomain, choices=list(RegulatoryDomain), default=None, help='For SX127X and SX126X based devices, which regulatory domain is being used')
     # Unified target
     parser.add_argument('--target', type=str, help='Unified target JSON path')
     # Flashing options

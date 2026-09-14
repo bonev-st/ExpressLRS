@@ -18,9 +18,10 @@ export function deriveFeatures(env = ENV) {
     IS_8285: toBool(env.VITE_FEATURE_IS_8285, false),
     HAS_SX128X: toBool(env.VITE_FEATURE_HAS_SX128X, false),
     HAS_SX127X: toBool(env.VITE_FEATURE_HAS_SX127X, false),
+    HAS_SX126X: toBool(env.VITE_FEATURE_HAS_SX126X, false),
     HAS_LR1121: toBool(env.VITE_FEATURE_HAS_LR1121, false),
     HAS_LR2021: toBool(env.VITE_FEATURE_HAS_LR2021, false),
-    HAS_SUBGHZ: toBool(env.VITE_FEATURE_HAS_LR1121, false) || toBool(env.VITE_FEATURE_HAS_LR2021, false) || toBool(env.VITE_FEATURE_HAS_SX127X, false),
+    HAS_SUBGHZ: toBool(env.VITE_FEATURE_HAS_LR1121, false) || toBool(env.VITE_FEATURE_HAS_LR2021, false) || toBool(env.VITE_FEATURE_HAS_SX127X, false) || toBool(env.VITE_FEATURE_HAS_SX126X, false),
     HAS_DUAL_BAND: toBool(env.VITE_FEATURE_HAS_LR1121, false) || toBool(env.VITE_FEATURE_HAS_LR2021, false),
   }
 }

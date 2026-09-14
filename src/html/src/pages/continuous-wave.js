@@ -170,6 +170,11 @@ export class ContinuousWave extends LitElement {
         const warn_offset = 100000
         const bad_offset = 125000
         // /FEATURE:HAS_SX127X
+        // FEATURE:HAS_SX126X
+        const xtalNominal = 32000000
+        const warn_offset = 100000
+        const bad_offset = 125000
+        // /FEATURE:HAS_SX126X
         // FEATURE:HAS_SX128X
         const xtalNominal = 52000000
         const warn_offset = 90000

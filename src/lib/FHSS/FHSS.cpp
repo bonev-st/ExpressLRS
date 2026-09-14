@@ -8,12 +8,16 @@
 #define POWER_OUTPUT_VALUES_DUAL_COUNT 0
 #endif
 
-#if defined(RADIO_SX127X) || defined(RADIO_LR1121) || defined(RADIO_LR2021)
+#if defined(RADIO_SX127X) || defined(RADIO_SX126X) || defined(RADIO_LR1121) || defined(RADIO_LR2021) 
 
 #if defined(RADIO_SX127X)
 #include "SX127xDriver.h"
+#elif defined(RADIO_SX126X)
+#include "SX126xDriver.h"
 #elif defined(RADIO_LR1121)
 #include "LR1121Driver.h"
+#elif defined(RADIO_SX126X)
+#include "SX126xDriver.h"
 #else
 #include "LR2021Driver.h"
 #endif
