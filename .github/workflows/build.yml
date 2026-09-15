@@ -204,7 +204,7 @@ jobs:
       - name: Checkout targets repo
         uses: actions/checkout@v6
         with:
-          repository: ExpressLRS/targets
+          repository: bonev-st/ExpressLRS_hardware
           path: src/hardware
 
       - name: Get firmware artifacts
