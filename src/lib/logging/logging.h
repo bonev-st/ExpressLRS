@@ -27,7 +27,13 @@
 
 extern Stream *BackpackOrLogStrm;
 #if defined(TARGET_TX) && defined(PLATFORM_ESP32_S3)
-#define LOGGING_UART (Serial)
+  #if defined(DEBUG_LOG)
+    // Serial (UART0) is never started on the S3 TX, so debug builds log to the native USB CDC port.
+    // That port also carries the binary CRSF frames of TxUSB, so the text is interleaved with them
+    #define LOGGING_UART (USBSerial)
+  #else
+    #define LOGGING_UART (Serial)
+  #endif
 #else
 #define LOGGING_UART (*BackpackOrLogStrm)
 #endif

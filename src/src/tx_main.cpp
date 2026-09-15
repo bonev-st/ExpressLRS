@@ -1234,6 +1234,10 @@ static void setupSerial()
 // Setup TxUSB
 #if defined(PLATFORM_ESP32_S3)
   // Because we have ARDUINO_USB_MODE enabled, we use USBSerial as the USB device.
+#if defined(DEBUG_LOG)
+  // Debug builds log here too (see logging.h). A larger buffer keeps the boot log until the PC reads it
+  USBSerial.setTxBufferSize(4096);
+#endif
   USBSerial.begin(firmwareOptions.uart_baud);
   TxUSB = &USBSerial;
 #elif defined(PLATFORM_ESP32) && !defined(PLATFORM_ESP32_C3)

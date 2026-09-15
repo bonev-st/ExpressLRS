@@ -1281,6 +1281,8 @@ static void setupSerial()
         #if defined(DEBUG_LOG) || defined(DEBUG_RCVR_LINKSTATS)
         #if defined(PLATFORM_ESP32_S3) && !defined(ESP32_S3_USB_JTAG_ENABLED)
         // Requires pull-down on GPIO3.  If GPIO3 has a pull-up (for JTAG) this doesn't work.
+        // A larger buffer keeps the boot log until the PC reads it
+        USBSerial.setTxBufferSize(4096);
         USBSerial.begin(serialBaud);
         BackpackOrLogStrm = &USBSerial;
         #else
@@ -1402,6 +1404,8 @@ static void setupSerial()
 
 #if defined(DEBUG_ENABLED)
 #if defined(PLATFORM_ESP32_S3) || defined(PLATFORM_ESP32_C3)
+    // A larger buffer keeps the boot log until the PC reads it
+    USBSerial.setTxBufferSize(4096);
     USBSerial.begin(460800);
     BackpackOrLogStrm = &USBSerial;
 #else
@@ -1886,14 +1890,15 @@ static void debugRcvrLinkstats()
         // fire right after packet reception (a little before tock)
         int32_t pfd = PfdPrevRawOffset;
 
-        // Use serial instead of DBG() because do not necessarily want all the debug in our logs
+        // Use the log stream instead of DBG() because do not necessarily want all the debug in our logs.
+        // setupSerial points it at Serial, or at USBSerial on the S3 where UART0 is not started for logging
         char buf[50];
         snprintf(buf, sizeof(buf), "%u,%u,-%u,%u,%d,%u,%u,%d\r\n",
             packetCounter, ls.active_antenna,
             ls.active_antenna ? ls.uplink_RSSI_2 : ls.uplink_RSSI_1,
             ls.uplink_Link_quality, ls.uplink_SNR,
             ls.uplink_TX_Power, fhss, pfd);
-        Serial.write(buf);
+        BackpackOrLogStrm->write((const uint8_t *)buf, strlen(buf));
     }
 #endif
 }
