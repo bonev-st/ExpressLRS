@@ -24,8 +24,9 @@
 #define STR_LUA_PACKETRATES \
     "D50Hz(-112dBm);25Hz(-123dBm);50Hz(-120dBm);100Hz(-117dBm);100Hz Full(-112dBm);200Hz(-112dBm)"
 #elif defined(RADIO_SX126X)
+// Option i is table row RATE_MAX - 1 - i, so 150Hz (row 6, the last) comes first
 #define STR_LUA_PACKETRATES \
-    "D50Hz(-112dBm);25Hz(-123dBm);50Hz(-120dBm);100Hz(-117dBm);100Hz Full(-112dBm);200Hz(-112dBm)"
+    "150Hz(-112dBm);D50Hz(-112dBm);25Hz(-123dBm);50Hz(-120dBm);100Hz(-117dBm);100Hz Full(-112dBm);200Hz(-112dBm)"
 #elif defined(RADIO_SX128X)
 #define STR_LUA_PACKETRATES \
 "50Hz(-115dBm);100Hz Full(-112dBm);150Hz(-112dBm);250Hz(-108dBm);333Hz Full(-105dBm);500Hz(-105dBm);" \

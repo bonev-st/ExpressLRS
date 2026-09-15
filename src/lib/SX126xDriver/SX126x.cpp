@@ -42,6 +42,7 @@ SX126xDriver::SX126xDriver(): SX12xxDriverCommon()
     strongestReceivingRadio = SX12XX_Radio_1;
     pwrCurrent = PWRPENDING_NONE;
     pwrPending = PWRPENDING_NONE;
+    pendingFreq[0] = pendingFreq[1] = 0;
     currFreq = 915000000;
     PayloadLength = 8; // Dummy default value which is overwritten during setup.
 }
@@ -206,6 +207,7 @@ void SX126xDriver::Config(uint8_t bw, uint8_t sf, uint8_t cr, uint32_t freq,
 #else
     SetPacketParamsLoRa(PreambleLength, SX126X_LORA_PACKET_IMPLICIT);
 #endif
+    pendingFreq[0] = pendingFreq[1] = 0;
     SetFrequencyReg(freq, SX12XX_Radio_All, false);
     ClearIrqStatus(SX126X_IRQ_RADIO_ALL, SX12XX_Radio_All);
 }
@@ -329,11 +331,29 @@ void SX126xDriver::SetPacketParamsLoRa(uint8_t PreambleLength, SX126x_RadioLoRaP
 
 void ICACHE_RAM_ATTR SX126xDriver::SetFrequencyReg(uint32_t freq, SX12XX_Radio_Number_t radioNumber, bool doRx)
 {
+    // Normally no hop comes during a transmission: the TX hops after TX_DONE, the RX before it sends telemetry.
+    // One comes only when a TX_DONE is lost. Retuning then would abort the packet (STDBY_XOSC) or leave the PLL on
+    // the old frequency, so keep the hop until TX_DONE or the next TXnb() timeout, where TXnbISR() applies it
+    if (currOpmode == SX126X_MODE_TX)
+    {
+        for (uint8_t i = 0; i < 2; i++)
+        {
+            if (radioNumber & radioList[i])
+            {
+                pendingFreq[i] = freq;
+            }
+        }
+        currFreq = freq;
+        return;
+    }
+
     // Checked before anything changes currOpmode, so the second per-radio call in Gemini mode also sees RX
     const bool wasRx = currOpmode == SX126X_MODE_RX_CONT;
-    if (wasRx)
+    // Change the frequency from STDBY_XOSC: in FS (the fallback after TX) or RX the PLL stays locked to the old
+    // frequency, and the link lost every packet after the first hop. The next SetTx or SetRx locks the PLL again
+    if (wasRx || currOpmode == SX126X_MODE_FS)
     {
-        hal.WriteCommand(SX126X_RADIO_SET_FS, nullptr, 0, radioNumber, 70);
+        SetMode(SX126X_MODE_STDBY_XOSC, radioNumber);
     }
 
     const uint32_t regfreq = freqHzToReg(freq);
@@ -401,6 +421,16 @@ void ICACHE_RAM_ATTR SX126xDriver::ClearIrqStatus(uint16_t irqMask, SX12XX_Radio
 void ICACHE_RAM_ATTR SX126xDriver::TXnbISR()
 {
     currOpmode = fallBackMode; // the radio falls back after TX
+    // Apply a hop that came during the transmission (see SetFrequencyReg)
+    for (uint8_t i = 0; i < radioCount(); i++)
+    {
+        if (pendingFreq[i] != 0)
+        {
+            const uint32_t freq = pendingFreq[i];
+            pendingFreq[i] = 0;
+            SetFrequencyReg(freq, radioList[i], false);
+        }
+    }
 #ifdef DEBUG_SX126X_OTA_TIMING
     endTX = micros();
     DBGLN("TOA: %d", endTX - beginTX);
@@ -416,7 +446,6 @@ void ICACHE_RAM_ATTR SX126xDriver::TXnb(uint8_t * data, bool sendGeminiBuffer, u
     //catch TX timeout
     if (currOpmode == SX126X_MODE_TX)
     {
-        DBGLN("Timeout!");
         SetMode(fallBackMode, SX12XX_Radio_All);
         ClearIrqStatus(SX126X_IRQ_RADIO_ALL, SX12XX_Radio_All);
         TXnbISR();

@@ -172,7 +172,11 @@ expresslrs_mod_settings_s ExpressLRS_AirRateConfig[RATE_MAX] = {
     {2, RadioBandMod::Combined::LORA_900, RATE_LORA_900_100HZ,     SX126X_LORA_BW_500, SX126X_LORA_SF7, SX126X_LORA_CR_4_7,  8, TLM_RATIO_1_32, 4, 10000, OTA4_PACKET_SIZE, 1},
     {3, RadioBandMod::Combined::LORA_900, RATE_LORA_900_50HZ,      SX126X_LORA_BW_500, SX126X_LORA_SF8, SX126X_LORA_CR_4_7, 10, TLM_RATIO_1_16, 4, 20000, OTA4_PACKET_SIZE, 1},
     {4, RadioBandMod::Combined::LORA_900, RATE_LORA_900_25HZ,      SX126X_LORA_BW_500, SX126X_LORA_SF9, SX126X_LORA_CR_4_7, 10, TLM_RATIO_1_8,  2, 40000, OTA4_PACKET_SIZE, 1},
-    {5, RadioBandMod::Combined::LORA_900, RATE_LORA_900_50HZ_DVDA, SX126X_LORA_BW_500, SX126X_LORA_SF6, SX126X_LORA_CR_4_7,  8, TLM_RATIO_1_64, 2,  5000, OTA4_PACKET_SIZE, 4}};
+    {5, RadioBandMod::Combined::LORA_900, RATE_LORA_900_50HZ_DVDA, SX126X_LORA_BW_500, SX126X_LORA_SF6, SX126X_LORA_CR_4_7,  8, TLM_RATIO_1_64, 2,  5000, OTA4_PACKET_SIZE, 4},
+    // 150Hz exists only in this table among the 900 MHz radios, so only SX126x devices can link at it. The SF6
+    // packet of 200Hz in a 6.67 ms slot leaves about 2 ms for the telemetry turnaround instead of about 0.2 ms.
+    // Appended last so the stored rate indexes of the rows above stay valid
+    {6, RadioBandMod::Combined::LORA_900, RATE_LORA_900_150HZ,     SX126X_LORA_BW_500, SX126X_LORA_SF6, SX126X_LORA_CR_4_7,  8, TLM_RATIO_1_32, 4,  6666, OTA4_PACKET_SIZE, 1}};
 
 // SX126x time on air: SF5/SF6 add 2 preamble symbols over SX127x, SF7+ match the SX127X table
 expresslrs_rf_pref_params_s ExpressLRS_AirRateRFperf[RATE_MAX] = {
@@ -181,7 +185,8 @@ expresslrs_rf_pref_params_s ExpressLRS_AirRateRFperf[RATE_MAX] = {
     {2, -117,  8770, 3500, 2500, 600, 5000, SNR_SCALE( 1), SNR_SCALE(2.5)},
     {3, -120, 18560, 4000, 2500, 600, 5000, SNR_SCALE(-1), SNR_SCALE(1.5)},
     {4, -123, 29950, 6000, 4000, 600, 5000, SNR_SCALE(-3), SNR_SCALE(0.5)},
-    {5, -112,  4640, 3000, 2500, 600, 5000, SNR_SCALE( 1), SNR_SCALE(3.0)}};
+    {5, -112,  4640, 3000, 2500, 600, 5000, SNR_SCALE( 1), SNR_SCALE(3.0)},
+    {6, -112,  4640, 3000, 2500, 600, 5000, SNR_SCALE( 1), SNR_SCALE(3.0)}};
 #endif
 
 

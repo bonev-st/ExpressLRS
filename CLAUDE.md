@@ -122,7 +122,7 @@ C and C++ follow `src/.clang-format` (Microsoft base, 4-space indent, no column 
 - Tools in `Docs/hwtest/`: `elrs_usbmon.py` (USB CDC monitor, link-statistics decoder, CRSF parameter client), `linkstats_summary.py`, `rtl_power_scan.py`. Logs go to `Docs/hwtest/logs` (gitignored).
 - Commit `e51bcf5f` holds only the debug USB logging, so it can be reverted on its own. Remove code marked `TEMPORARY` before the driver is committed: bring-up diagnostics, `DEBUG_CW_*`, `DEBUG_PLL_SCAN`, `SX126X_BISECT`.
 - SX126x HAL: `SPIEx::write()` returns while the frame is still being clocked out, and BUSY rises only up to 600 ns after NSS goes high. So `SX126xHal::WaitOnBusy()` and `WaitOnBusyLong()` call `SPIEx.waitIdle()` and wait at least 1 µs before they sample BUSY. Without that, commands reached a busy chip and were dropped or garbled: the CW was silent and SetTx/SetRx failed with PLL_LOCK (fixed on 2026-09-16, see `Docs/hwtest/test-report.md`). Keep this when you change the HAL.
-- The SX126x rate table has an extra 150Hz row (the last one, SF6 at 6.67 ms). No other 900 MHz radio table has it, so only SX126x devices can link at it. At 200Hz and D50 the downlink fails, because the telemetry turnaround leaves only about 0.2 ms; at 150Hz it works, even at telemetry 1:2.
+- The SX126x rate table has an extra 150Hz row (the last one, SF6 at 6.67 ms). No other 900 MHz radio table has it, so only SX126x devices can link at it. At 200Hz and D50 the downlink fails, because the telemetry turnaround leaves only about 0.2 ms; at 150Hz it works, even at telemetry 1:2. It is therefore the SX126x default in `TxConfig::SetDefaults` and the RX's initial rate, where the other radios use 200Hz or 250Hz.
 
 ### Bench
 

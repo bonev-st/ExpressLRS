@@ -59,10 +59,11 @@ elif platform in ['espressif32']:
         env.Replace(UPLOAD_PROTOCOL="custom")
         env.Replace(UPLOADCMD=upload_via_esp8266_backpack.on_upload)
     elif "_UART" in target_name:
-        env.Replace(
-            UPLOADER="$PROJECT_DIR/python/external/esptool/esptool.py",
-            UPLOAD_SPEED=460800
-        )
+        env.Replace(UPLOAD_SPEED=460800)
+        # The bundled esptool 4.2.1 is unreliable on the ESP32-S3 USB-Serial/JTAG port: on a XIAO ESP32S3
+        # it lost the stub connection ("Stub running..." then StopIteration). The platform's esptool works
+        if "ESP32S3" not in target_name:
+            env.Replace(UPLOADER="$PROJECT_DIR/python/external/esptool/esptool.py")
     if "_ETX" in target_name:
         env.Replace(UPLOADER="$PROJECT_DIR/python/external/esptool/esptool.py")
         env.AddPreAction("upload", ETXinitPassthrough.init_passthrough)

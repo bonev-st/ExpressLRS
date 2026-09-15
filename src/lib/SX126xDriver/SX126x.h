@@ -53,6 +53,7 @@ private:
     SX126x_RadioOperatingModes_t fallBackMode;
     int8_t pwrCurrent;
     int8_t pwrPending;
+    uint32_t pendingFreq[2]; // Hop that came during a transmission, applied at TX_DONE (0 = none)
 
     bool DetectChip(SX12XX_Radio_Number_t radioNumber);
     void SetMode(SX126x_RadioOperatingModes_t OPmode, SX12XX_Radio_Number_t radioNumber);

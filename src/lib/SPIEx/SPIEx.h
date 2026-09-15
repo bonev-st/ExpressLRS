@@ -47,6 +47,16 @@ public:
      */
     void inline ICACHE_RAM_ATTR write(uint8_t cs_mask, uint8_t * data, uint32_t size) { _transfer(cs_mask, data, size, false); }
 
+#if defined(RADIO_SX126X)
+    /**
+     * @brief Wait until the SPI module has finished its current operation, such as the frame of the last write.
+     *
+     * Only the SX126x needs this: it raises BUSY after CS rises, so its HAL must not sample BUSY while the
+     * frame of the previous command is still going out.
+     */
+    void waitIdle();
+#endif
+
 private:
     void _transfer(uint8_t cs_mask, uint8_t *data, uint32_t size, bool reading);
 };

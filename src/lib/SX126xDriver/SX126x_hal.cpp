@@ -247,6 +247,14 @@ bool ICACHE_RAM_ATTR SX126xHal::WaitOnBusy(SX12XX_Radio_Number_t radioNumber)
         constexpr uint32_t wtimeoutUS = 1000U;
         uint32_t startTime = 0;
 
+        // SPIEx::write() returns while its frame is still being clocked out, and BUSY rises only after NSS goes high
+        // (up to 600 ns, datasheet 8.3.1). Sampled earlier, BUSY reads low and the next command reaches a busy chip,
+        // which drops or garbles it. So wait for the transfer to end, then at least 1 us, then poll BUSY
+        SPIEx.waitIdle();
+        const uint32_t idleUs = micros();
+        while ((micros() - idleUs) < 2)
+        {
+        }
         while (IsBusy(radioNumber))
         {
             // Use this time to call micros().
@@ -279,6 +287,11 @@ bool SX126xHal::WaitOnBusyLong(SX12XX_Radio_Number_t radioNumber, uint32_t timeo
         return true;
     }
 
+    // BUSY rises shortly after NSS goes high, and SPIEx::write() returns before the frame has ended. Checked straight
+    // after the command, BUSY can still read low; the long operation (calibration, TCXO start) then blocks the next
+    // commands, and the chip ignores commands while BUSY is high
+    SPIEx.waitIdle();
+    delayMicroseconds(10);
     const uint32_t startTime = millis();
     while (IsBusy(radioNumber))
     {

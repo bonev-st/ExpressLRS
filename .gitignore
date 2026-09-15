@@ -10,3 +10,4 @@ src/data/*.json
 src/hardware
 Docs/hwtest/logs
 __pycache__
+Docs/hwtest/*.html

@@ -302,7 +302,7 @@ extern LR1121Driver Radio;
 extern LR2021Driver Radio;
 
 #elif defined(RADIO_SX126X)
-#define RATE_MAX 6
+#define RATE_MAX 7      // the SX127x 900 MHz rates + 150Hz
 #define RATE_BINDING RATE_LORA_900_50HZ
 
 extern SX126xDriver Radio; 

@@ -769,7 +769,11 @@ TxConfig::SetDefaults(bool commit)
     for (unsigned i=0; i<CONFIG_TX_MODEL_CNT; i++)
     {
         SetModelId(i);
-        #if defined(RADIO_SX127X) || defined(RADIO_SX126X)
+        #if defined(RADIO_SX126X)
+            // 150Hz, not 200Hz: at 200Hz the SF6 telemetry turnaround leaves about 0.2 ms, so the downlink does
+            // not work, while 150Hz has about 2 ms and carries telemetry even at 1:2 (test-report.md, T3/T4/T5)
+            SetRate(enumRatetoIndexSafe(RATE_LORA_900_150HZ));
+        #elif defined(RADIO_SX127X)
             SetRate(enumRatetoIndexSafe(RATE_LORA_900_200HZ));
         #elif defined(RADIO_LR1121) || defined(RADIO_LR2021)
             SetRate(enumRatetoIndexSafe(POWER_OUTPUT_VALUES_COUNT == 0 ? RATE_LORA_2G4_250HZ : RATE_LORA_900_200HZ));
@@ -1265,6 +1269,10 @@ RxConfig::SetDefaults(bool commit)
     m_config.version = RX_CONFIG_VERSION | RX_CONFIG_MAGIC;
     m_config.modelId = 0xff;
     m_config.power = POWERMGNT::getDefaultPower();
+#if defined(RADIO_SX126X)
+    // Start rate cycling at 150Hz, the SX126x default in TxConfig::SetDefaults, rather than at table row 0 (200Hz)
+    m_config.rateInitialIdx = enumRatetoIndexSafe(RATE_LORA_900_150HZ);
+#endif
     if (GPIO_PIN_ANT_CTRL != UNDEF_PIN)
         m_config.antennaMode = 2; // 2 is diversity
     if (GPIO_PIN_NSS_2 != UNDEF_PIN)

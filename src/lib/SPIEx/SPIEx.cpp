@@ -84,6 +84,18 @@ void ICACHE_RAM_ATTR SPIExClass::_transfer(uint8_t cs_mask, uint8_t *data, uint3
 #endif
 }
 
+#if defined(RADIO_SX126X)
+void ICACHE_RAM_ATTR SPIExClass::waitIdle()
+{
+#if defined(PLATFORM_ESP32)
+    spi_dev_t *spi = *(reinterpret_cast<spi_dev_t**>(bus()));
+    while(spi->cmd.usr) {}
+#elif defined(PLATFORM_ESP8266)
+    while(SPI1CMD & SPIBUSY) {}
+#endif
+}
+#endif
+
 #if defined(PLATFORM_ESP32_S3) || defined(PLATFORM_ESP32_C3)
 SPIExClass SPIEx(FSPI);
 #elif defined(PLATFORM_ESP32)

@@ -88,6 +88,15 @@ Result:
 - T14 confirms on air that the link hops over all 13 channels.
 - 200Hz and D50 still lose the downlink, because their telemetry turnaround leaves only about 0.2 ms. 150Hz has about 2 ms and passes in both directions, even at 1:2.
 
+Afterwards, at the user's request, 150Hz became the SX126x default and the temporary test code was removed:
+
+- `TxConfig::SetDefaults` selects 150Hz for the SX126x, where the SX127x keeps 200Hz, and `RxConfig::SetDefaults` starts its rate cycling at the same row.
+- Verified on hardware: board A was erased with `erase_flash`, so it built a fresh config, and it came up at `Packet Rate = 150Hz`, Telem Ratio Std (1:32), 10 mW. The link reached LQ 100 in both directions, with no BUSY or `Timeout!` line ([`logs/T150_default.log`](logs/T150_default.log)).
+- `SPIExClass::waitIdle()` is compiled only for `RADIO_SX126X` builds, in the header and the source.
+- Removed: the `DEBUG_PLL_SCAN`, `DEBUG_CW_*` and `SX126X_BISECT` blocks, `DebugPrintState` and its callers, the boot-time FS test, and the HAL's `noteCommand` tracking with the 30 ms BUSY report. The plain BUSY timeout message stays.
+- Kept, because they are fixes rather than diagnostics: the BUSY waits, the retune through STDBY_XOSC, and the `pendingFreq` deferral, which guards a lost TX_DONE.
+- All four builds compile after the cleanup: debug and release, TX and RX.
+
 ## Hop-deferral check (2026-09-16)
 
 Session `Hopping-channels`, 02:07 to 02:12, at the user's request: does the hop deferral in `SetFrequencyReg()` (`pendingFreq`) ever run? A TEMPORARY `DEBUG_HOP_DEFER` build counted, on both boards, the hops that found the radio in TX, the hops applied at TX_DONE, and the TX_DONEs that never came. `loop()` printed the counters every 5 s. The counter code was removed again after the run.
