@@ -156,6 +156,7 @@ const HARDWARE_SCHEMA = [
             },
             /* /FEATURE: NOT HAS_SX127X */
             /* FEATURE: NOT HAS_SX128X */
+            /* FEATURE: NOT HAS_SX126X */
             {
                 id: 'radio_rfo_hf',
                 label: 'RFO_HF enabled',
@@ -163,7 +164,37 @@ const HARDWARE_SCHEMA = [
                 icon: null,
                 desc: 'SX127x PA to use, either the RFO_HF or PA_BOOST (depends on circuit design)'
             },
+            /* /FEATURE: NOT HAS_SX126X */
             /* /FEATURE: NOT HAS_SX128X */
+            /* FEATURE: HAS_SX126X */
+            {
+                id: 'radio_tcxo',
+                label: 'SX126x TCXO voltage select',
+                type: 'select',
+                options: [
+                    {value: -1, label: 'External'},
+                    {value: 0, label: '1.6V'}, {value: 1, label: '1.7V'}, {value: 2, label: '1.8V'},
+                    {value: 3, label: '2.2V'}, {value: 4, label: '2.4V'}, {value: 5, label: '2.7V'},
+                    {value: 6, label: '3.0V'}, {value: 7, label: '3.3V'}
+                ],
+                desc: 'Voltage DIO3 supplies to the TCXO. External means the TCXO is externally powered'
+            },
+            {
+                id: 'radio_tcxo_delay',
+                label: 'SX126x TCXO start time',
+                type: 'uint',
+                size: 11,
+                icon: null,
+                desc: 'How long for the TCXO to stabilize, in 15.625 µs steps, 320 = 5 ms'
+            },
+            {
+                id: 'radio_dio2_rfsw',
+                label: 'DIO2 RF switch',
+                type: 'checkbox',
+                icon: null,
+                desc: 'DIO2 drives the RF switch (TX high). Required by modules such as the Wio-SX1262'
+            },
+            /* /FEATURE: HAS_SX126X */
             /* FEATURE: HAS_LR1121 */
             {
                 id: 'radio_rfsw_ctrl',

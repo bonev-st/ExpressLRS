@@ -47,9 +47,6 @@ def generateUID(phrase):
 def FREQ_HZ_TO_REG_VAL_SX127X(freq):
     return int(freq/61.03515625)
 
-def FREQ_HZ_TO_REG_VAL_SX126X(freq):
-    return int(freq/61.03515625)
-
 def FREQ_HZ_TO_REG_VAL_SX1280(freq):
     return int(freq/(52000000.0/pow(2,18)))
 

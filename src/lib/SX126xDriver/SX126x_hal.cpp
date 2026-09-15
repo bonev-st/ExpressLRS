@@ -24,6 +24,9 @@ Modified and adapted by Alessandro Carcione for ELRS project
 
 SX126xHal *SX126xHal::instance = NULL;
 
+// The SX126x SPI clock is limited to 16 MHz
+static constexpr uint32_t SX126X_SPI_FREQUENCY = 10000000;
+
 SX126xHal::SX126xHal()
 {
     instance = this;
@@ -66,7 +69,7 @@ void SX126xHal::init()
 #ifdef PLATFORM_ESP32
     SPIEx.begin(GPIO_PIN_SCK, GPIO_PIN_MISO, GPIO_PIN_MOSI, GPIO_PIN_NSS); // sck, miso, mosi, ss (ss can be any GPIO)
     gpio_pullup_en((gpio_num_t)GPIO_PIN_MISO);
-    SPIEx.setFrequency(17500000);
+    SPIEx.setFrequency(SX126X_SPI_FREQUENCY);
     SPIEx.setHwCs(true);
     if (GPIO_PIN_NSS_2 != UNDEF_PIN)
     {
@@ -81,10 +84,9 @@ void SX126xHal::init()
     SPIEx.setHwCs(true);
     SPIEx.setBitOrder(MSBFIRST);
     SPIEx.setDataMode(SPI_MODE0);
-    SPIEx.setFrequency(17500000);
+    SPIEx.setFrequency(SX126X_SPI_FREQUENCY);
 #endif
 
-    //attachInterrupt(digitalPinToInterrupt(GPIO_PIN_BUSY), this->busyISR, CHANGE); //not used atm
     attachInterrupt(digitalPinToInterrupt(GPIO_PIN_DIO1), this->dioISR_1, RISING);
     if (GPIO_PIN_DIO1_2 != UNDEF_PIN)
     {
@@ -117,7 +119,6 @@ void SX126xHal::reset(void)
     BusyDelay(10000); // 10ms delay if GPIO_PIN_BUSY is undefined
     WaitOnBusy(SX12XX_Radio_All);
 
-    //this->BusyState = SX1280_NOT_BUSY;
     DBGLN("SX126x Ready!");
 }
 
@@ -132,7 +133,10 @@ void ICACHE_RAM_ATTR SX126xHal::WriteCommand(SX126x_RadioCommands_t command, uin
         command,
     };
 
-    memcpy(OutBuffer + 1, buffer, size);
+    if (size)
+    {
+        memcpy(OutBuffer + 1, buffer, size);
+    }
 
     WaitOnBusy(radioNumber);
     SPIEx.write(radioNumber, OutBuffer, size + 1);
@@ -140,7 +144,7 @@ void ICACHE_RAM_ATTR SX126xHal::WriteCommand(SX126x_RadioCommands_t command, uin
     BusyDelay(busyDelay);
 }
 
-SX126x_RadioStatus_t ICACHE_RAM_ATTR SX126xHal::ReadCommand(SX126x_RadioCommands_t command, uint8_t *buffer, uint8_t size, SX12XX_Radio_Number_t radioNumber)
+uint8_t ICACHE_RAM_ATTR SX126xHal::ReadCommand(SX126x_RadioCommands_t command, uint8_t *buffer, uint8_t size, SX12XX_Radio_Number_t radioNumber)
 {
     WORD_ALIGNED_ATTR uint8_t OutBuffer[WORD_PADDED(size + 2)] = {
         (uint8_t)command,
@@ -150,9 +154,9 @@ SX126x_RadioStatus_t ICACHE_RAM_ATTR SX126xHal::ReadCommand(SX126x_RadioCommands
 
     WaitOnBusy(radioNumber);
 
-    SPIEx.read(radioNumber, OutBuffer, size + 2); // first 2 bytes returned are status!
+    SPIEx.read(radioNumber, OutBuffer, size + 2); // the status comes back on the byte after the opcode, then the data
     memcpy(buffer, OutBuffer + 2, size);
-    return (SX126x_RadioStatus_t)(OutBuffer[0] & SX126X_STATUS_MASK); // Discard reserved bits
+    return OutBuffer[1] & SX126X_STATUS_MASK; // Discard reserved bits
 }
 
 void ICACHE_RAM_ATTR SX126xHal::WriteRegister(uint16_t address, uint8_t *buffer, uint8_t size, SX12XX_Radio_Number_t radioNumber)
@@ -229,6 +233,13 @@ void ICACHE_RAM_ATTR SX126xHal::ReadBuffer(uint8_t offset, uint8_t *buffer, uint
     memcpy(buffer, OutBuffer + 3, size);
 }
 
+bool ICACHE_RAM_ATTR SX126xHal::IsBusy(SX12XX_Radio_Number_t radioNumber)
+{
+    const bool busy1 = (radioNumber & SX12XX_Radio_1) && digitalRead(GPIO_PIN_BUSY) == HIGH;
+    const bool busy2 = (radioNumber & SX12XX_Radio_2) && GPIO_PIN_BUSY_2 != UNDEF_PIN && digitalRead(GPIO_PIN_BUSY_2) == HIGH;
+    return busy1 || busy2;
+}
+
 bool ICACHE_RAM_ATTR SX126xHal::WaitOnBusy(SX12XX_Radio_Number_t radioNumber)
 {
     if (GPIO_PIN_BUSY != UNDEF_PIN)
@@ -236,31 +247,16 @@ bool ICACHE_RAM_ATTR SX126xHal::WaitOnBusy(SX12XX_Radio_Number_t radioNumber)
         constexpr uint32_t wtimeoutUS = 1000U;
         uint32_t startTime = 0;
 
-        while (true)
+        while (IsBusy(radioNumber))
         {
-            if (radioNumber == SX12XX_Radio_1)
-            {
-                if (digitalRead(GPIO_PIN_BUSY) == LOW) return true;
-            }
-            else if (radioNumber == SX12XX_Radio_2)
-            {
-                if (GPIO_PIN_BUSY_2 == UNDEF_PIN || digitalRead(GPIO_PIN_BUSY_2) == LOW) return true;
-            }
-            else if (radioNumber == SX12XX_Radio_All)
-            {
-                if (GPIO_PIN_BUSY_2 != UNDEF_PIN)
-                {
-                    if (digitalRead(GPIO_PIN_BUSY) == LOW && digitalRead(GPIO_PIN_BUSY_2) == LOW) return true;
-                }
-                else
-                {
-                    if (digitalRead(GPIO_PIN_BUSY) == LOW) return true;
-                }
-            }
             // Use this time to call micros().
             uint32_t now = micros();
             if (startTime == 0) startTime = now;
-            if ((now - startTime) > wtimeoutUS) return false;
+            if ((now - startTime) > wtimeoutUS)
+            {
+                DBGLN("SX126x BUSY timeout, radio %u", radioNumber);
+                return false;
+            }
         }
     }
     else
@@ -269,6 +265,28 @@ bool ICACHE_RAM_ATTR SX126xHal::WaitOnBusy(SX12XX_Radio_Number_t radioNumber)
         while ((now - BusyDelayStart) < BusyDelayDuration)
             now = micros();
         BusyDelayDuration = 0;
+    }
+    return true;
+}
+
+bool SX126xHal::WaitOnBusyLong(SX12XX_Radio_Number_t radioNumber, uint32_t timeoutMs)
+{
+    if (GPIO_PIN_BUSY == UNDEF_PIN)
+    {
+        // Nothing to poll, so allow the whole time
+        delay(timeoutMs);
+        BusyDelayDuration = 0;
+        return true;
+    }
+
+    const uint32_t startTime = millis();
+    while (IsBusy(radioNumber))
+    {
+        if ((millis() - startTime) > timeoutMs)
+        {
+            DBGLN("SX126x BUSY still high after %ums, radio %u", timeoutMs, radioNumber);
+            return false;
+        }
     }
     return true;
 }

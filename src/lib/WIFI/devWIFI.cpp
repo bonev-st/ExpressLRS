@@ -567,9 +567,9 @@ static void GetConfiguration(AsyncWebServerRequest *request)
     settings["reg_domain_low"] = FHSSconfig->domain;
 #elif defined(RADIO_SX126X)
     settings["radio-type"] = "SX126X";
-    settings["has_low_band"] = false;
-    settings["has_high_band"] = true;
-    settings["reg_domain_high"] = FHSSconfig->domain;
+    settings["has_low_band"] = true;
+    settings["has_high_band"] = false;
+    settings["reg_domain_low"] = FHSSconfig->domain;
 #elif defined(RADIO_SX128X)
     settings["radio-type"] = "SX128X";
     settings["has_low_band"] = false;
@@ -1057,11 +1057,9 @@ static void HandleContinuousWave(AsyncWebServerRequest *request) {
     Radio.TXdoneCallback = [](){};
 #if defined(RADIO_SX127X)
     Radio.Begin();
-#elif defined(RADIO_SX126X)
-    Radio.Begin();
 #elif defined(RADIO_SX128X)
     Radio.Begin();
-#elif defined(RADIO_LR1121)
+#elif defined(RADIO_SX126X) || defined(RADIO_LR1121)
     Radio.Begin(FHSSgetMinimumFreq(), FHSSgetMaximumFreq());
 #elif defined(RADIO_LR2021)
     Radio.Begin(FHSSconfig->freq_center, FHSSconfigDualBand->freq_center);

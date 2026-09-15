@@ -21,12 +21,6 @@ Heavily modified/simplified by Alessandro Carcione 2020 for ELRS project
 #include "SX126x_Regs.h"
 #include "SX126x.h"
 
-enum SX126x_BusyState_
-{
-    SX1280_NOT_BUSY = true,
-    SX1280_BUSY = false,
-};
-
 class SX126xHal
 {
 public:
@@ -43,7 +37,7 @@ public:
     void ICACHE_RAM_ATTR WriteRegister(uint16_t address, uint8_t *buffer, uint8_t size, SX12XX_Radio_Number_t radioNumber);
     void ICACHE_RAM_ATTR WriteRegister(uint16_t address, uint8_t value, SX12XX_Radio_Number_t radioNumber);
 
-    SX126x_RadioStatus_t ICACHE_RAM_ATTR ReadCommand(SX126x_RadioCommands_t opcode, uint8_t *buffer, uint8_t size, SX12XX_Radio_Number_t radioNumber);
+    uint8_t ICACHE_RAM_ATTR ReadCommand(SX126x_RadioCommands_t opcode, uint8_t *buffer, uint8_t size, SX12XX_Radio_Number_t radioNumber);
     void ICACHE_RAM_ATTR ReadRegister(uint16_t address, uint8_t *buffer, uint8_t size, SX12XX_Radio_Number_t radioNumber);
     uint8_t ICACHE_RAM_ATTR ReadRegister(uint16_t address, SX12XX_Radio_Number_t radioNumber);
 
@@ -51,6 +45,8 @@ public:
     void ICACHE_RAM_ATTR ReadBuffer(uint8_t offset, uint8_t *buffer, uint8_t size, SX12XX_Radio_Number_t radioNumber);
 
     bool ICACHE_RAM_ATTR WaitOnBusy(SX12XX_Radio_Number_t radioNumber);
+    // For commands that hold BUSY for milliseconds (TCXO start, calibration), never on the hot path
+    bool WaitOnBusyLong(SX12XX_Radio_Number_t radioNumber, uint32_t timeoutMs);
 
     static ICACHE_RAM_ATTR void dioISR_1();
     static ICACHE_RAM_ATTR void dioISR_2();
@@ -69,5 +65,5 @@ public:
     }
 
 private:
-
+    bool ICACHE_RAM_ATTR IsBusy(SX12XX_Radio_Number_t radioNumber);
 };

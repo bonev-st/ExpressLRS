@@ -16,8 +16,6 @@
 #include "SX126xDriver.h"
 #elif defined(RADIO_LR1121)
 #include "LR1121Driver.h"
-#elif defined(RADIO_SX126X)
-#include "SX126xDriver.h"
 #else
 #include "LR2021Driver.h"
 #endif

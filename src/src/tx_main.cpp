@@ -470,8 +470,6 @@ void SetRFLinkRate(uint8_t index) // Set speed of RF link
                ModParams->PreambleLen, invertIQ, ModParams->PayloadLength
 #if defined(RADIO_SX128X)
                , OtaGetUidSeed(), OtaCrcInitializer, ModParams->radio_type
-#elif defined(RADIO_SX126X)
-               , OtaGetUidSeed(), OtaCrcInitializer, ModParams->radio_type
 #elif defined(RADIO_LR1121) || defined(RADIO_LR2021)
                , ModParams->radio_type, (uint8_t)UID[5], (uint8_t)UID[4]
 #if defined(RADIO_LR2021)
@@ -1425,7 +1423,7 @@ void setup()
         init_success = Radio.Begin();
 #elif defined(RADIO_SX128X)
         init_success = Radio.Begin();
-#elif defined(RADIO_LR1121)
+#elif defined(RADIO_SX126X) || defined(RADIO_LR1121)
         init_success = Radio.Begin(FHSSgetMinimumFreq(), FHSSgetMaximumFreq());
 #elif defined(RADIO_LR2021)
         init_success = Radio.Begin(FHSSconfig->freq_center, FHSSconfigDualBand->freq_center);
