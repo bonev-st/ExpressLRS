@@ -1,5 +1,18 @@
 # Plan: Port `src/lib/SX126xDriver` to a real SX1262 LoRa-900 driver (TX + RX, Wio-SX1262)
 
+## Update after the bench tests (2026-09-16)
+
+These corrections to the plan below come from the bench tests. Details: `Docs/hwtest/test-report.md` (T10, T12) and `Docs/Wio-SX1262-hardware-test-plan.md`.
+
+- **HAL (fixed on 2026-09-16 in `SX126x_hal.cpp` and `SPIEx`, retested in T1-T14):** `SPIEx::write()` is asynchronous. `WaitOnBusy()` can therefore sample BUSY before the previous frame has ended and send the next command while the chip is busy, and the SX1262 then drops or garbles it. This made the CW test silent (T10) and caused the PLL_LOCK failures of SetTx and SetRx (T12). The fix:
+  1. `WaitOnBusy()` first waits for the SPI transfer to finish.
+  2. It then allows about 1 µs for BUSY to rise.
+  3. Only then does it poll BUSY.
+
+  `WaitOnBusyLong()` needs the same. With every command waiting like this, SetRx locks on all 13 EU868 channels, and the CW, the preamble and packets all radiate.
+- **Pins:** the Meshtastic `seeed_xiao_s3` pins under "Wio-SX1262 on XIAO ESP32-S3" belong to the B2B-connector kit. The user's pin-header board uses DIO1 GPIO2, RST GPIO3, BUSY GPIO4, NSS GPIO5 and RF_SW GPIO6 (`src/hardware/TX/DIY XIAO ESP32S3 Wio-SX1262.json`).
+- **Git:** `src/` is not a nested git repository. Only `src/hardware`, the targets fork, is.
+
 ## Execution split (decided by the user)
 - **Part 1, on this PC (the only thing this session does after approval):**
   1. Save this plan as `SX126X_DRIVER_PLAN.md` at the **outer repo root** (`…/ExpressLRS/ExpressLRS/`, next to `README.md`), not in `src/`: `src/` contains a nested git repo (`src/.git`).

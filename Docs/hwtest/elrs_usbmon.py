@@ -276,6 +276,8 @@ class Port(threading.Thread):
         self.write_lock = threading.Lock()
         self.connected = threading.Event()
         self.demux = Demux()
+        self.reset_pending = False
+        self.reset_count = 1
 
     def _open(self):
         dev = resolve_port(self.spec)
@@ -289,6 +291,24 @@ class Port(threading.Thread):
         ser.dtr = False
         ser.rts = False
         ser.open()
+        if self.reset_pending:
+            # A hard reset like esptool's: RTS pulls EN low on the USB Serial/JTAG port. DTR stays low, so the
+            # chip boots the application. The port may drop and come back; the reader reconnects
+            self.reset_pending = False
+            for n in range(self.reset_count):
+                if n:
+                    # Each boot must get through setup, where the RX counts power-ons, and end within 2 s,
+                    # before the RX clears the count again
+                    time.sleep(1.2)
+                # Windows usbser.sys only sends a new RTS state together with a DTR update, so write DTR
+                # again after each RTS change (esptool does the same)
+                ser.rts = True
+                ser.dtr = False
+                time.sleep(0.2)
+                ser.rts = False
+                ser.dtr = False
+            self.out.line(self.label, "reset the board" if self.reset_count == 1
+                          else f"reset the board {self.reset_count} times")
         self.ser = ser
         self.connected.set()
         self.out.line(self.label, f"connected to {dev}")
@@ -473,7 +493,9 @@ class ParamClient:
         return None
 
     def ping(self):
-        fr = self._request(make_ext_frame(FT_DEVICE_PING, ADDR_BROADCAST, self.orig),
+        # Ping the TX module itself: a broadcast ping is also forwarded to the RX over the air, as uplink data
+        # that boosts the telemetry ratio to 1:2 until the RX replies
+        fr = self._request(make_ext_frame(FT_DEVICE_PING, ADDR_CRSF_TRANSMITTER, self.orig),
                            lambda f: f.type == FT_DEVICE_INFO and f.orig == ADDR_CRSF_TRANSMITTER)
         if fr is None:
             return None
@@ -662,6 +684,12 @@ def main():
     ap.add_argument("--cmd", action="append", default=[], metavar="NAME",
                     help='run a TX command parameter, e.g. "Bind" or "Enable WiFi"')
     ap.add_argument("--exit", action="store_true", help="exit after --params/--set/--cmd instead of monitoring")
+    ap.add_argument("--duration", type=float, default=0, metavar="S",
+                    help="stop after S seconds and print the summary (default: run until Ctrl+C)")
+    ap.add_argument("--reset", action="append", default=[], metavar="LABEL",
+                    help="reset the board with this label once after its port opens (RTS pulse, DTR stays low)")
+    ap.add_argument("--reset-count", type=int, default=1, metavar="N",
+                    help="with --reset: reset N times, 1.2 s apart; 3 puts a bound RX in bind mode")
     ap.add_argument("--selftest", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args()
 
@@ -680,6 +708,8 @@ def main():
     for n, spec in enumerate(args.port, 1):
         label, _, where = spec.rpartition("=")
         port = Port(label or f"P{n}", where, out)
+        port.reset_pending = port.label in args.reset
+        port.reset_count = max(1, args.reset_count)
         port.start()
         ports.append(port)
 
@@ -688,7 +718,8 @@ def main():
             tx = ports[0]
             if not tx.connected.wait(10):
                 sys.exit(f"{tx.label}: port did not open")
-            time.sleep(0.3)
+            # After a reset, give the TX time to boot and the port time to come back
+            time.sleep(6.0 if tx.label in args.reset else 0.3)
             client = ParamClient(tx, out)
             client.read_all()
             if args.params:
@@ -700,8 +731,9 @@ def main():
                 client.command(name)
             if args.exit:
                 return
-        while True:
-            time.sleep(1)
+        end = time.monotonic() + args.duration if args.duration else None
+        while end is None or time.monotonic() < end:
+            time.sleep(0.2)
     except KeyboardInterrupt:
         pass
     except (RuntimeError, ValueError) as e:

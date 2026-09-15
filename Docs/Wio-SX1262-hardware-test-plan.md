@@ -4,7 +4,7 @@ This plan tests the SX1262 driver port on the `Wio-SX1262` branch with two Seeed
 
 Both boards connect to the PC only by their USB-C cable. The TX runs without a handset. Both boards print their log over USB CDC. The PC tool [`hwtest/elrs_usbmon.py`](hwtest/elrs_usbmon.py) shows both logs, decodes the link statistics the TX sends, and changes TX settings the way the ExpressLRS Lua script does on a handset.
 
-No hardware test has been run yet. Write the results in [section 5](#5-results-sheet).
+The first hardware run was on 2026-09-15 and 16; its results are in [`hwtest/test-report.md`](hwtest/test-report.md). For a new run, write the results in [section 5](#5-results-sheet).
 
 ## 1. Before you start
 
@@ -15,7 +15,7 @@ No hardware test has been run yet. Write the results in [section 5](#5-results-s
 - On air, use 10 mW (the default) or 25 mW. The EU limit of 25 mW is e.r.p., so an antenna with gain lowers the allowed setting. Use 50 mW and 100 mW only with the antenna ports connected through attenuators (40 dB or more in total) or into dummy loads, or skip those steps.
 - ExpressLRS transmits almost all the time and has no listen-before-talk at 868 MHz. On-air runs therefore exceed the EU SRD duty-cycle limits of 863 to 870 MHz, which are 0.1 % to 10 % depending on the sub-band (general knowledge; see ERC/REC 70-03 and ETSI EN 300 220). Keep on-air runs as short as each test needs. For the long runs (T5 and T11), connect the two antenna ports by cable through at least 40 dB of attenuation if you can, or shorten them.
 - Keep the boards 1 to 3 m apart. At less than about 0.5 m the receivers can overload, and the TX lowers its power by itself when the uplink RSSI reaches -5 dBm.
-- The continuous-wave (CW) test in T10 sends a constant carrier. Keep it to a few seconds.
+- The continuous-wave (CW) test in T10 sends a constant carrier. Keep each carrier to about 20 s, and less than a minute in total per board.
 - Never connect a board's antenna port to the RTL-SDR by cable unless there are at least 40 dB of attenuators in between. 10 mW straight into the SDR can damage it. Over the air, keep the SDR antenna at least 1 m from the board.
 
 ### 1.2 What you need
@@ -48,7 +48,9 @@ $py   = 'C:\Users\bonev\.platformio\penv\Scripts\python.exe'
 $mon  = 'C:\Work\RF-RC\ExpressLRS\ExpressLRS\Docs\hwtest\elrs_usbmon.py'
 $logs = 'C:\Work\RF-RC\ExpressLRS\ExpressLRS\Docs\hwtest\logs'
 $scan = 'C:\Work\RF-RC\ExpressLRS\ExpressLRS\Docs\hwtest\rtl_power_scan.py'
-$rtl  = 'C:\Tools\rtl-sdr'   # folder with rtl_power.exe (section 1.7)
+$lss  = 'C:\Work\RF-RC\ExpressLRS\ExpressLRS\Docs\hwtest\linkstats_summary.py'   # T13
+$rtl  = 'C:\Users\bonev\Downloads\Release\x64'   # folder with rtl_power.exe (section 1.7)
+$esptool = 'C:\Users\bonev\.platformio\packages\tool-esptoolpy\esptool.py'   # esptool v4.9.0 (section 2.3)
 New-Item -ItemType Directory -Force $logs | Out-Null
 $TX = 'COM6'; $TXSER = '47:A0'   # change both lines to match your labels
 $RX = 'COM9'; $RXSER = '47:B0'
@@ -56,7 +58,7 @@ $RX = 'COM9'; $RXSER = '47:B0'
 
 ### 1.5 Debug changes on the branch
 
-The branch has five small changes for these tests. They only affect builds with `DEBUG_*` flags; release builds are unchanged. Both debug builds compile (TX: RAM 20.5 %, flash 75.5 %).
+The branch has five small changes for these tests. They only affect builds with `DEBUG_*` flags; release builds are unchanged. Both debug builds compile (TX: RAM 20.5 %, flash 75.5 %). The first hardware run also found driver bugs; see [section 1.8](#18-driver-fixes-from-the-first-hardware-run).
 
 | File | Change | Why |
 |---|---|---|
@@ -66,7 +68,7 @@ The branch has five small changes for these tests. They only affect builds with 
 | `src/src/rx_main.cpp`, `debugRcvrLinkstats()` | The `DEBUG_RCVR_LINKSTATS` CSV goes to the log stream | It went to the UART0 pins, not to USB |
 | `src/lib/SX126xDriver/SX126x.cpp` | Removed the "status at first RX_DONE" log line | It ran inside the DIO1 interrupt, and USB logging is not interrupt-safe |
 
-Decide after the tests whether to keep these changes before the branch is committed.
+These changes are in their own commit, `e51bcf5f`. If you decide after the tests not to keep them, `git revert e51bcf5f` removes them.
 
 Some log lines are still printed from inside interrupts: `tentative conn`, `New UID = ...` and `New TLMrate ...` on the RX, and the driver's `SX126x BUSY timeout` and `Timeout!`. USB logging is not interrupt-safe, so in a debug build a restart right after one of these lines points to the logging, not the driver. Repeat such a test with the release build (T12).
 
@@ -81,6 +83,9 @@ The tool opens a board's USB port without resetting it. It prints each text line
 | List all TX settings | `& $py $mon --port "TX=$TXSER" --params --exit` |
 | Set a setting, then keep watching | `& $py $mon --port "TX=$TXSER" --port "RX=$RXSER" --set "Packet Rate=50Hz"` |
 | Run a TX command | `& $py $mon --port "TX=$TXSER" --cmd Bind --exit` |
+| Restart a board and capture its boot log | `& $py $mon --port "RX=$RXSER" --reset RX --log "$logs\T1"` |
+| Stop after a fixed time and print the summary | Add `--duration 60` to any monitor command |
+| Reset a board several times, 1.2 s apart (3 resets put a bound RX in bind mode, T8) | `& $py $mon --port "RX=$RXSER" --reset RX --reset-count 3` |
 
 Setting names and values:
 
@@ -96,16 +101,47 @@ Rules:
 - Do not type into the TX port. The TX reads every byte as CRSF, and a valid MAVLink frame would switch it to MAVLink mode.
 - `& $pio device monitor -p $RX --dtr 0 --rts 0` also works for the RX. For the TX use the tool, because its text log is mixed with binary CRSF frames.
 
+RX packet scoreboard: build both boards with `-DDEBUG_LOG -DDEBUG_TX_FREERUN -DDEBUG_RX_SCOREBOARD`. The RX then prints one character per packet slot: `R` received, `_` missed, `.` CRC error, `s` sync packet, `T` telemetry sent. In this mode the RX sends nothing to a flight controller.
+
 ### 1.7 RTL-SDR V4 setup (for T10 and T14)
 
 1. Install the USB driver. Plug in the RTL-SDR and run Zadig. Select Options, List All Devices, choose `Bulk-In, Interface (Interface 0)`, select WinUSB and click Replace Driver (or Install Driver).
-2. Download the Windows release of the RTL-SDR Blog drivers (GitHub `rtlsdrblog/rtl-sdr-blog`, Releases, the Windows x64 zip) and unpack it to `C:\Tools\rtl-sdr`. The V4 needs these drivers; older RTL-SDR builds do not handle its tuner correctly.
-3. Test it: `& "$rtl\rtl_test.exe" -t`. It must list the device and print `Found Rafael Micro R828D tuner`. The line `No E4000 tuner found, aborting.` after it is normal.
+2. Download the Windows release of the RTL-SDR Blog drivers (GitHub `rtlsdrblog/rtl-sdr-blog`, Releases, the Windows x64 zip) and unpack it. On this bench it is in `C:\Users\bonev\Downloads\Release\x64`; set `$rtl` (section 1.4) to your folder. The V4 needs these drivers; older RTL-SDR builds do not handle its tuner correctly.
+3. Test it: `& "$rtl\rtl_test.exe" -t`. It must list the device and print `Found Rafael Micro R828D tuner` and `RTL-SDR Blog V4 Detected`. The line `No E4000 tuner found, aborting.` after it is normal. The driver recognises the V4 by the strings `RTLSDRBlog` and `Blog V4` in its EEPROM, so never change them with `rtl_eeprom`.
 4. For a visual check, install SDR++ or SDR# in a version that supports the V4 (2023 or later). This is optional.
 
-The V4 has a 1 ppm reference oscillator, so its own error at 868 MHz is about 0.9 kHz. That is small enough for T10 without calibration.
+Rules for rtl_power:
 
-The SDR has a spike at the centre of each tuning step. The commands in T10 and T14 do not centre on a signal, and the script [`hwtest/rtl_power_scan.py`](hwtest/rtl_power_scan.py) ignores the bins next to those centres.
+- Only one program can use the SDR. Close SDR++ or SDR# first, and run one rtl_power at a time.
+- Always give a fixed gain; start with `-g 0`, the lowest. In rtl_power `-g 0` is 0 dB, and without `-g` the tuner's automatic gain follows the hopping signal. (In `rtl_sdr` and `rtl_tcp`, `-g 0` means automatic.) rtl_power rounds to the tuner's table: `-g 10` gives 8.7 dB, `-g 20` gives 19.7 dB.
+- Give the frequencies in Hz, exactly as in T10 and T14, and keep each tuning window 1 MHz or wider. Below 1 MHz rtl_power adds samples together before its FFT, and a strong carrier then overflows it and lands kHz off. `& $py $scan plan <-f value> --crop <-c value>` prints the windows a command will use, without opening the SDR.
+- Keep the bias tee off: no `-T`, no `-O` (on the V4, "offset tuning" switches the bias tee), no `rtl_biast -b 1`. rtl_power switches it off at every start.
+- `-p` takes whole ppm only; do not use it.
+- The dB values are relative, not dBm. Compare only recordings made with the same command, gain and SDR position.
+- If rtl_power has not returned 15 s after its `-e` time, it hangs in a USB read (the driver waits for ever) and `-e` never fires. Run `Stop-Process -Name rtl_power`, and check that the CSV's last row is recent.
+
+The V4 has a 1 ppm reference oscillator (TCXO), so its own error at 868 MHz is up to about 0.9 kHz. The steps of its tuner's PLL add up to about 0.4 kHz. That is small enough for T10 without calibration, and it is the same for both boards when both are measured with the same command.
+
+rtl_power overwrites the centre bin of each tuning window with its neighbour, and the T10 and T14 commands keep every signal away from those centres; the script [`hwtest/rtl_power_scan.py`](hwtest/rtl_power_scan.py) also ignores the bins next to them. The V4 has its own narrow spur at 864.000 MHz, 30 times its 28.8 MHz reference. A strong signal also appears weakly at other frequencies (tuner images, aliases at the window edges); the script ignores anything 20 dB or more below the strongest channel.
+
+### 1.8 Driver fixes from the first hardware run
+
+The first run on 2026-09-15 found these problems. The fixes are in the working tree and not committed yet. Results: [`hwtest/test-report.md`](hwtest/test-report.md).
+
+| Problem | Symptom | Fix |
+|---|---|---|
+| `WaitOnBusyLong()` checked BUSY too early after the image calibration. The next commands were lost, among them the fallback mode, so the TCXO switched off after every packet | TX `Timeout!` on every second packet, many BUSY timeouts, no link | `SX126x_hal.cpp`: wait 10 µs before the first BUSY check |
+| The SX1262 kept its old frequency when the frequency was changed in FS or RX mode | RX `tentative conn`, then `Bad sync, aborting`; scoreboard `RR____...` | `SX126x.cpp`: `SetFrequencyReg()` goes through STDBY_XOSC |
+| A hop that arrives while the radio transmits would retune it during the transmission | Suspected behind the 100Hz `T_T_T_` and `TLM crc error` of 2026-09-15, wrongly: a counter run on 2026-09-16 shows that hops never overlap a transmission | `SX126x.cpp`: the hop waits until TX_DONE. Kept as a safeguard against a lost TX_DONE; the 100Hz failure was most likely cured by the HAL BUSY fix |
+| The old esptool v4.2.1 | `StopIteration` after `Stub running...` | `build_env_setup.py`: ESP32-S3 uploads use esptool v4.9.0 |
+
+Known limitation: at 200Hz and D50 the TX receives no telemetry. The RX's telemetry packet ends only about 0.2 ms before the TX's next packet, so the downlink is lost, while the uplink LQ is 100. This needs a timing or rate-table change.
+
+Temporary diagnostics in builds with `-DDEBUG_LOG`, to be removed before the final commit:
+
+- `FS test DCDC, ...` and `FS test LDO, ...` after boot: a PLL lock test. Both must show `err 0x0`.
+- `SX126x BUSY <n> us after cmd 0x..`: BUSY stayed high longer than 1 ms. The driver then waits up to 30 ms.
+- `Timeout! #n status 0x.. irq 0x.. err 0x.. dio1 .. freq ..` on the TX.
 
 ## 2. Build and flash
 
@@ -134,10 +170,14 @@ Use the same flags for both boards. When the flags change, PlatformIO deletes th
 
 Old data in flash would override or mix with the new build: a `hardware.json` saved from the web UI, or old TX and RX settings.
 
+Use the esptool that comes with PlatformIO (v4.9.0, `$esptool` from section 1.4). The older esptool in `src\python\external` (v4.2.1) is unreliable on the XIAO's USB port: it can stop with `StopIteration` right after `Stub running...`.
+
 ```powershell
-& $py python\external\esptool\esptool.py --chip esp32s3 --port $TX erase_flash
-& $py python\external\esptool\esptool.py --chip esp32s3 --port $RX erase_flash
+& $py $esptool --chip esp32s3 --port $TX erase_flash
+& $py $esptool --chip esp32s3 --port $RX erase_flash
 ```
+
+Each command ends with `Chip erase completed successfully` and `Hard resetting via RTS pin...`.
 
 If esptool cannot connect: unplug the board, hold the XIAO BOOT button, plug it in, release BOOT, check the COM port with `--list`, and run the command again.
 
@@ -153,6 +193,7 @@ Check the output:
 - A `UID bytes:` line. Write the six numbers down.
 - The build flags contain `-DRegulatory_Domain_EU_868`, `-DDEBUG_LOG` and `-DDEBUG_TX_FREERUN`.
 - No product menu (`0) Leave bare ...`) and no `Warning: configuration ... was not found`.
+- The upload starts with `esptool.py v4.9.0`. For ESP32-S3 targets the build uses PlatformIO's esptool, not the old v4.2.1 (`src/python/build_env_setup.py`).
 - esptool prints `Hash of data verified` for each image and ends with `Hard resetting via RTS pin`.
 
 ### 2.5 Flash the RX
@@ -182,7 +223,7 @@ Use the `..._RX_via_UART` path for the RX. The layout must show `radio_nss 5`, `
 
 1. Unplug the TX board. The TX transmits as soon as it has power, and the RX would link at once.
 2. Start the monitor for the RX only: `& $py $mon --port "RX=$RXSER" --log "$logs\T1"`
-3. Unplug the RX USB cable and plug it in again (or press the XIAO RESET button). The tool reconnects and prints the boot log.
+3. Unplug the RX USB cable and plug it in again, press the XIAO RESET button, or add `--reset RX` to the monitor command. The tool reconnects and prints the boot log.
 
 Pass:
 
@@ -207,6 +248,7 @@ Pass:
   ```
 
 - No line contains `BUSY`.
+- Debug builds with the current diagnostics also print `FS test DCDC, 866425000 Hz, reg 0x3626cccc: status 0x42 err 0x0`, and the same for `LDO`, after `device errors`. Both must show `err 0x0`.
 - The LED blinks 500 ms on, 500 ms off (bound, no link yet).
 
 Without a TX, the RX starts WiFi after 60 s and its LED flickers fast. That is normal. Unplug and plug the RX to start again.
@@ -239,6 +281,8 @@ Pass:
 - No `lost conn`, `Timeout!` or `TLM crc error` line, and no restart (no new boot lines).
 - The summary at Ctrl+C starts 5 s after the link came up. It shows a minimum LQ of 100, or close to it, and few frames with LQ below 100.
 
+Known issue from the first run: at 200 Hz the TX receives no telemetry (`lq 0` down), although the uplink LQ is 100. Check the whole link at 50Hz as well (`--set "Packet Rate=50Hz"`). See [section 1.8](#18-driver-fixes-from-the-first-hardware-run).
+
 ### T4: Packet-rate sweep
 
 Run each rate for at least 60 s. Start with the monitor stopped, then:
@@ -267,6 +311,10 @@ Pass for each rate:
 - After that, `lq` stays at 98 or more up and down, and there is no further `lost conn`.
 
 If the RX does not reconnect within 10 s, unplug and plug in the RX, and note it in the results. `LOCK_ON_FIRST_CONNECTION` keeps a disconnected RX on the last rate it was connected on, without searching the other rates, until it restarts or enters bind mode.
+
+After a rate change the RX logs `New TLMrate 1:<n>` with the rate's default ratio. Uplink data, for example a device ping forwarded to the RX, makes the TX boost the ratio to 1:2 until the RX replies. Without a downlink the boost stays, and the RX then sends telemetry (`T` in the scoreboard) in every second slot. The monitor tool pings only the TX, so it does not cause the boost.
+
+First-run result: 25Hz, 50Hz and 100Hz Full pass; 100Hz was poor; D50 and 200Hz have no downlink. Details are in the test report.
 
 ### T5: Telemetry turnaround stress
 
@@ -299,15 +347,42 @@ Run the monitor with `--set "Max Power=10"`. Increase the path loss (distance, w
 
 ### T8: Bind
 
+With the button:
+
 1. Unplug the TX. Start the monitor for the RX only.
 2. Put the RX in bind mode: hold the Wio button for 1.5 to 4 s and release it. At 5 s it starts WiFi instead, and at 12 s it resets all RX settings. The LED double-blinks, and the log shows `Entered binding mode at freq = ...`.
 3. Stop the monitor, plug in the TX, and run:
 
    ```powershell
-   & $py $mon --port "TX=$TXSER" --port "RX=$RXSER" --cmd Bind --log "$logs\T8"
+   & $py $mon --port "TX=$TXSER" --port "RX=$RXSER" --cmd Bind --duration 45 --log "$logs\T8"
    ```
 
-Pass: the tool prints `cmd: Bind (command, executing) Binding...` and later `idle`. The RX log shows `New UID = ...` (the last four numbers equal the TX UID) and `Exiting binding mode`. The link comes back, and both LEDs are solid.
+Without touching the boards (both stay plugged in): the RX enters bind mode after 3 boots in a row that each end within 2 s. It clears that count as soon as it links, so the TX must not transmit meanwhile.
+
+1. Stop the TX by putting it in the ROM download mode. esptool ends with `Staying in bootloader.`
+
+   ```powershell
+   & $py $esptool --chip esp32s3 --port $TX --before default_reset --after no_reset read_mac
+   ```
+
+2. Reset the RX 3 times, 1.2 s apart. The log shows `Power on counter >=3, enter binding mode` and `Entered binding mode at freq = 866425000`.
+
+   ```powershell
+   & $py $mon --port "RX=$RXSER" --reset RX --reset-count 3 --duration 10 --log "$logs\T8_rx"
+   ```
+
+3. Restart the TX and bind:
+
+   ```powershell
+   & $py $mon --port "TX=$TXSER" --port "RX=$RXSER" --reset TX --cmd Bind --duration 45 --log "$logs\T8"
+   ```
+
+Pass:
+
+- The tool prints `cmd: Bind (command, executing) Binding...` and later `idle`.
+- The RX log shows `New UID = 0, 0, ...` and `Exiting binding mode`. The bind packet carries only the last four UID bytes, so the RX sets the first two to 0. The last four must equal the TX UID.
+- The RX logs `tentative conn` within about 10 s: after a bind it searches through all packet rates. The TX link statistics show up LQ 100 at once. The down LQ rises over about 30 s at 50Hz while its 100-packet window fills, and then stays at 100.
+- Both LEDs are solid.
 
 Without the tool: press the TX Wio button 3 times quickly instead of running `--cmd Bind`.
 
@@ -342,47 +417,55 @@ Pass:
 
 ### T10: CW frequency check with the RTL-SDR V4
 
-The board sends an unmodulated carrier at 868.000 MHz and 10 mW. The RTL-SDR measures its frequency to about 1 kHz.
+The board sends an unmodulated carrier at 868.000 MHz and 10 mW. The RTL-SDR measures its frequency to about 1.5 kHz, and the difference between the two boards to about 0.1 kHz.
 
-1. Place the RTL-SDR antenna 1 to 2 m from the board.
-2. Put the board in WiFi mode and connect to it (T9).
-3. Run `curl.exe -s http://10.0.0.1/cw`. It must show `{"radios": 1, "center": 868000000}`. If the center value is different, stop.
-4. Start the carrier from the web page (Continuous Wave, Start), or run `curl.exe -s -o NUL -w '%{http_code}' -F radio=1 -F subGHz=1 http://10.0.0.1/cw`, which prints `204`.
-5. Record 10 s and read the result:
+The recording covers 866.0 to 868.4 MHz in 293 Hz bins, so it holds the nominal 868.000 MHz and also the sync channel, 866.425 MHz. A carrier on the sync channel means the chip ignored the CW command's SetRfFrequency and kept the frequency `Config()` had set. The script prints a time line, one line per second, so the carrier can be seen switching on and off with the board.
+
+1. Place the RTL-SDR antenna 1 to 2 m from the board. Power only the board under test, so that no link packets are on the air.
+2. Choose how to start the carrier:
+   - Web page (T9): put the board in WiFi mode and connect to it. `curl.exe -s http://10.0.0.1/cw` must show `{"radios": 1, "center": 868000000}`; if the center value is different, stop. In step 3, start the carrier with `curl.exe -s -o NUL -w '%{http_code}' -F radio=1 -F subGHz=1 http://10.0.0.1/cw` (prints `204`) or the page's Continuous Wave, Start button. The firmware has no stop command: unplug the board after 20 s.
+   - Without WiFi: a TX debug build with `-DDEBUG_LOG -DDEBUG_CW_TEST` (a temporary flag in `tx_main.cpp`) sends a 20 s carrier 3 s after every reset (`-DDEBUG_CW_SECONDS=60` for 60 s) and logs `CW start #0 status 0x62 ...`. In step 3, reset it with `& $py $mon --port "TX=$TXSER" --reset TX --duration 30 --log "$logs\T10_A_log"`.
+3. Start the recording, wait about 5 s, then start the carrier. The recording must cover the whole carrier and a few seconds before and after it:
 
    ```powershell
-   & "$rtl\rtl_power.exe" -f 867.95M:868.15M:100 -g 10 -i 1 -e 10s "$logs\T10_A.csv"
+   & "$rtl\rtl_power.exe" -f 866000000:868400000:500 -g 0 -w blackman-harris -i 1 -e 45s "$logs\T10_A.csv"
    & $py $scan peak "$logs\T10_A.csv"
    ```
 
-   The script prints the peak frequency and its offset from 868.000 MHz in kHz and ppm. The recording is centred on 868.05 MHz on purpose, so the SDR's own centre spike is away from the carrier.
+   rtl_power records one 2.4 MHz window centred on 867.2 MHz, without downsampling. The carrier is 800 kHz from the window centre. The script prints, per second, the strongest signal, how far it is above that second's median, and the level at 868.000 and at 866.425 MHz; lines with a carrier (20 dB or more above the median) are marked `*`. Then it prints the carrier frequency (the mean of the marked lines), its offset from 868.000 MHz in kHz and ppm, and the nearest EU868 channel.
 
-6. Optional: type the measured frequency into the web page field "Measured Center Frequency". The page shows the offset of the board's 32 MHz TCXO in kHz and ppm.
-7. Unplug the board. The firmware has no stop command. Keep the carrier on for less than a minute in total.
+4. Optional: type the measured frequency into the web page field "Measured Center Frequency". The page shows the offset of the board's 32 MHz TCXO in kHz and ppm.
+5. Keep the carrier on for less than a minute in total.
 
-Repeat with the other board, and save to `T10_B.csv`.
+Repeat with the other board right after the first, with the same command, and save to `T10_B.csv`. The SDR's own error then drops out of the difference.
 
-If the script warns about another strong signal, the SDR is overloaded. Use `-g 0` or move the SDR further away, and measure again.
+If the script says `NO CARRIER`:
 
-Visual check with SDR++ or SDR# (optional): select the RTL-SDR source, sample rate 2.4 MHz, gain about 20 dB with AGC off, and tune to 867.900 MHz, so the carrier appears 100 kHz right of the centre. Set the FFT size to 65536 or more, zoom in on the carrier, and read its frequency under the mouse pointer.
+- Check that the SDR sees the board: at the same position and gain, T14 must show the link's packets.
+- Record once more with `-g 29.7` instead of `-g 0`. A weak carrier at 868.000 MHz that shows up only at this gain means the synthesiser runs but little power reaches the antenna (PA or RF switch). Nothing at all means no RF.
+- Optional wide search: record the T14 command while the carrier is on and run `peak` on that file. It covers 862.5 to 870.9 MHz.
+
+If the script warns about another strong signal, the SDR is overloaded or another transmitter is on: move the SDR further away and measure again. A signal in only one or two lines is not the carrier.
+
+Visual check with SDR++ or SDR# (optional): sample rate 2.4 MHz, gain 0 to 10 dB, AGC off, offset tuning off and bias tee off, centre 867.200 MHz, so that 868.000 MHz (right) and 866.425 MHz (left) are both in view. Set the FFT size to 65536 or more, zoom in on the carrier, and read its frequency under the mouse pointer.
 
 Pass:
 
-- The script reports a clear peak, 20 dB or more above the median level.
-- Each board is within 10 kHz of 868.000 MHz. A working TCXO is usually within 3 kHz.
+- The script finds a carrier (lines marked `*`) while the board sends it, and none before or after.
+- Each board is within 10 kHz of 868.000 MHz. A working TCXO is usually within 3 kHz; the SDR adds up to about 1.3 kHz of its own.
 - The two boards differ by 10 kHz or less.
 
-No carrier at all, or `device errors 0x20` or `0x40` in T1 or T2, means the TCXO does not run: it is the only 32 MHz reference on the Wio-SX1262. An offset of more than 10 kHz points to a wrong reference or frequency setting.
+No carrier at all, or `device errors 0x20` or `0x40` in T1 or T2, means the TCXO does not run: it is the only 32 MHz reference on the Wio-SX1262. If the chip reports TX mode (`status 0x62`) without a device error and the SDR still sees nothing, while it sees the link's packets at the same position and gain, the carrier is not radiated: check the driver's CW path (`startCWTest()`) and the RF switch. An offset of more than 10 kHz points to a wrong reference or frequency setting.
 
 ### T11: Soak test
 
-Run 30 minutes at the default rate and 10 mW. If you can, connect the two antenna ports by cable through at least 40 dB of attenuation (section 1.1). On air, shorten the run to 5 minutes.
+Run 30 minutes at 50Hz and 10 mW. If you can, connect the two antenna ports by cable through at least 40 dB of attenuation (section 1.1). On air, shorten the run to 5 minutes (`--duration 300`). Use 50Hz until the 200Hz downlink works (section 1.8): at 200Hz the downlink LQ stays 0.
 
 ```powershell
-& $py $mon --port "TX=$TXSER" --port "RX=$RXSER" --set "Packet Rate=200Hz" --set "Telem Ratio=Std" --set "Max Power=10" --log "$logs\T11_soak"
+& $py $mon --port "TX=$TXSER" --port "RX=$RXSER" --set "Packet Rate=50Hz" --set "Telem Ratio=Std" --set "Max Power=10" --duration 1800 --ls-every 30 --log "$logs\T11_soak"
 ```
 
-Pass: no `lost conn`, `Timeout!`, `TLM crc error` or `BUSY` line, no new boot lines (the boards did not restart), and in the summary an average LQ of 99 or more up and down.
+Pass: after the `set:` lines, no `lost conn`, `Timeout!`, `TLM crc error` or `BUSY` line and no new boot lines (the boards did not restart). In the summary, an average LQ of 99 or more up and down. Lines printed before the `set:` lines are old output the RX kept while no monitor was open (for example a `lost conn` from the previous test's rate change) and do not count.
 
 ### T12: Release build (no debug flags)
 
@@ -419,34 +502,62 @@ Both boards need this flag, because it changes the packet contents. The RX then 
 
 Gaps in the packet id show lost packets. In this mode the RX sends nothing to a flight controller.
 
-Record 2 minutes with `--log "$logs\T13"`, then count the packets per channel:
+Record 2 minutes, then summarise the per-packet lines with [`hwtest/linkstats_summary.py`](hwtest/linkstats_summary.py):
 
 ```powershell
-Select-String -Path "$logs\T13.log" -Pattern '\[RX\] (\d+),\d+,-\d+,\d+,-?\d+,\d+,(\d+),' | ForEach-Object { $_.Matches[0].Groups[2].Value } | Group-Object | Sort-Object { [int]$_.Name } | Format-Table Name, Count
+& $py $mon --port "TX=$TXSER" --port "RX=$RXSER" --set "Packet Rate=50Hz" --set "Max Power=10" --duration 120 --ls-every 30 --log "$logs\T13"
+& $py $lss "$logs\T13.log"
 ```
 
-Pass: at 1 to 3 m and 10 mW, the packet id counts up without gaps, and all 13 channels (0 to 12) appear about equally often. A channel that is missing or rare points to a wrong frequency at that hop.
+The script prints:
+
+- the number of packets
+- the missing packet ids and where the gaps are
+- the RSSI, LQ, SNR, power and timer-offset ranges
+- the packets per channel, also as a fraction of the mean
+
+Pass, at 1 to 3 m and 10 mW:
+
+- The packet id counts up without gaps. Only RC packets carry an id, so sync packets and telemetry slots leave no gap. A packet lost on air also lowers the LQ to 99 in the lines that follow, so a gap while the LQ stays 100 is not a lost packet. This can happen in the RX's backlog from before the monitor opened the port (the lines before `set:`).
+- All 13 channels (0 to 12) appear about equally often, within about 10 % of the mean. The sync channel (`sync=6` in the boot log) has about 5 % fewer, because a sync packet there sometimes takes the place of an RC packet. A channel that is missing or rare points to a wrong frequency at that hop.
 
 ### T14: Hopping channels with the RTL-SDR V4 (optional)
 
-This checks that the link uses exactly the 13 EU868 channels. On the SX1262 the hopping frequencies are calculated in Hz, which is new in this port.
+This checks that the link hops over exactly the 13 EU868 channels and does not sit on one frequency. On the SX1262 the hopping frequencies are calculated in Hz, which is new in this port. If the radios ignored SetRfFrequency at each hop, both would stay on the frequency `Config()` sets, the sync channel 6 (866.425 MHz), and the link would still work. T13 cannot show that: its channel column is the RX's hop table, not a measurement.
 
-1. Start the link as in T3 (200 Hz), with the RTL-SDR antenna 1 to 2 m from the boards.
-2. Record 60 s and show the channels:
+rtl_power sees 2.4 MHz at a time. With the command below it tunes to four windows of 2.1 MHz in turn (centres 863.54, 865.64, 867.74 and 869.84 MHz, 9.4 kHz bins) and looks at each for 3.4 ms, 2 to 4 times a second. Every window centre and edge falls in the 25 kHz gap between two channels. So a hopping link lights up each channel in some of the 2 s rows, and a link on one frequency lights up the same channel in every row.
+
+1. Put the RTL-SDR 2 to 3 m from the boards. At 1 to 2 m and gain 20 the 10 mW signal overloaded it: the whole band rose by about 33 dB and all channels looked alike.
+2. With both boards off, record a 20 s baseline:
 
    ```powershell
-   & "$rtl\rtl_power.exe" -f 862M:871M:10k -g 20 -i 2 -e 60s "$logs\T14_hop.csv"
-   & $py $scan channels "$logs\T14_hop.csv"
+   & "$rtl\rtl_power.exe" -f 862487500:870887500:10000 -c 0.125 -g 0 -i 2 -e 20s "$logs\T14_base.csv"
    ```
+
+3. Start the link as in T3 (200 Hz). Record 2 minutes and analyse it:
+
+   ```powershell
+   & "$rtl\rtl_power.exe" -f 862487500:870887500:10000 -c 0.125 -g 0 -i 2 -e 120s "$logs\T14_hop.csv"
+   & $py $scan channels "$logs\T14_hop.csv" --baseline "$logs\T14_base.csv"
+   ```
+
+   Keep the frequencies in Hz and the crop exactly as shown; other values move window centres or edges onto channels. `& $py $scan plan 862487500:870887500:10000 --crop 0.125` shows the layout without the SDR.
+
+For each channel the script prints the rows in which it carried signal, its mean level against the baseline and its share of the energy. A channel's level is the lowest quarter of its central 400 kHz, which a LoRa BW500 channel fills completely. So the SDR's spur at 864.000 MHz and narrower outside signals, such as the LoRa device on 869.525 MHz seen on this bench, do not count. The verdict is one of:
+
+- `HOPPING over all 13 channels`: every channel carried signal, and each share lies between a quarter and four times the median share. Even use gives 7.7 % each.
+- `HOPPING over all 13 channels, but uneven`: all 13 are used, some much more or less than the others. Reflections in the room can do this: move the SDR by half a metre and repeat. If the same channels stay odd, the link favours or skips them.
+- `STUCK on channel N`: one channel has 80 % or more of the energy. On channel 6 (866.425 MHz) the radios never left the frequency set at start-up.
+- `PARTIAL`: some channels never carried signal; the script lists them.
+- `NO SIGNAL`: no channel rose 10 dB above the baseline. The link is off, or the SDR is too far away.
+- `NO VERDICT`: the band outside 863 to 870 MHz rose more than 10 dB above the baseline, or the channels of one window rose and fell together: the SDR is overloaded. Move it further away, turn its antenna across, or take the antenna off, and record both files again. Even then, the line `strongest channel per row` and the `Hint:` tell a link on one frequency (the same channel in every row) from a hopping one.
 
 Pass:
 
-- All 13 channels, 863.275 to 869.575 MHz, are 10 dB or more above the floor. The script counts them.
-- The out-of-band ranges 862.0 to 862.9 MHz and 870.0 to 871.0 MHz stay within 6 dB of the floor.
+- Verdict `HOPPING over all 13 channels` (`but uneven` still passes for the channel set; note it in the results).
+- No `WARNING: signal at ... outside the band`.
 
-If the out-of-band ranges show a signal, use `-g 0` or move the SDR further away, and repeat. A strong signal can overload the SDR and create false images.
-
-Visual check with SDR++ or SDR# (optional): the waterfall shows 2.4 MHz at a time. Tune to 864.3, 866.4 and 868.5 MHz in turn. Each view shows five channels lighting up one after the other.
+Visual check with SDR++ or SDR# (optional): gain 0 to 10 dB with AGC off. The waterfall shows 2.4 MHz at a time. Tune to 864.3, 866.4 and 868.5 MHz in turn. Each view shows four or five channels lighting up one after the other; a link on one frequency shows one steady channel.
 
 FCC915 is tested only by building it, and it built in the earlier session. Do not flash it here.
 
@@ -456,7 +567,7 @@ FCC915 is tested only by building it, and it built in the earlier session. Do no
 |---|---|---|
 | `SX126x #1 not found, sync word reads 0xff 0xff` (the RX also prints `Failed to detect RF chipset!!!`) | The chip does not answer on SPI: NSS or SCK wrong, or the module is not powered or seated | Pins D4 (NSS) and D8 (SCK); 3.3 V on the Wio board |
 | `... sync word reads 0x0 0x0` | MISO held low or on the wrong pin | Pin D9 (MISO); solder bridges |
-| Repeated `SX126x BUSY timeout` or `BUSY still high` | BUSY on the wrong pin, or the chip is held in reset or has no power | Pin D3 (BUSY); D2 (RST) must be high after boot |
+| Repeated `SX126x BUSY timeout`, `BUSY still high` or, in debug builds, `SX126x BUSY <n> us after cmd 0x..` | BUSY on the wrong pin, the chip held in reset or unpowered, or a build without the `WaitOnBusyLong()` fix | Pin D3 (BUSY); D2 (RST) must be high after boot; [section 1.8](#18-driver-fixes-from-the-first-hardware-run) |
 | `device errors 0x20` (sometimes with 0x04, 0x08, 0x10 or 0x40) | The TCXO did not start: wrong voltage or too short a delay | `SX126x TCXO voltage 2, delay 320` (2 = 1.8 V); try `radio_tcxo_delay` 640 |
 | `device errors 0x10` or `0x40` | Image calibration or PLL | `Primary Domain EU868` in the log; the TCXO checks above |
 | Driver log is correct, but the RX never connects | DIO1 on the wrong pin, or the TX is not transmitting | Pin D1 (DIO1); TX LED 500 ms on, 500 ms off means it transmits |
@@ -465,10 +576,16 @@ FCC915 is tested only by building it, and it built in the earlier session. Do no
 | Downlink LQ poor only at 200Hz or D50 with 1:2 | Turnaround timing (0.36 ms free) | Compare with 100Hz; note it in the results |
 | A debug build restarts right after a log line | A log call from an interrupt (USB logging is not interrupt-safe) | Repeat the test with the release build (T12) |
 | TX LED 200 ms on, 1 s off, and the WiFi `ExpressLRS TX` appears at once | The radio did not start (radioFailed) | TX log (T2), or flash the RX debug build on that board and read T1 |
-| T10 shows no carrier | The TCXO does not run, so the radio has no reference | `device errors` 0x20 or 0x40 and `SX126x TCXO voltage 2, delay 320` in T1 or T2 |
+| T10 shows no carrier | The TCXO does not run, so the radio has no reference. With `status 0x62` and no device error: the carrier is not radiated | `device errors` 0x20 or 0x40 and `SX126x TCXO voltage 2, delay 320` in T1 or T2; otherwise the `NO CARRIER` checks in T10, the RF switch and `startCWTest()` |
+| T10 carrier on 866.425 MHz instead of 868.000 MHz | The chip ignored the CW command's SetRfFrequency (for example sent while BUSY was high) and kept the `Config()` frequency | The BUSY waits before `SET_RFFREQUENCY` in `SetFrequencyReg()` |
 | T10 carrier more than 10 kHz from 868.000 MHz | Wrong reference or frequency setting | Compare the two boards; note the value in the results |
-| T14 shows signal outside 863 to 870 MHz | SDR overload (images), or wrong hopping frequencies | Lower the SDR gain or move it away; if the signal stays, check `Primary Domain EU868` in the log |
+| T14 `STUCK on channel 6` | The radios never change frequency: the chip ignores SetRfFrequency at each hop, for example because it comes while BUSY is still high after SetStandby(XOSC). T13 still shows all 13 channels | The BUSY wait before `SET_RFFREQUENCY` in `SetFrequencyReg()` |
+| T14 `NO VERDICT` | SDR overloaded, or the baseline was recorded with other settings | More distance, antenna across or off; record the baseline again with the same command |
+| T14 `PARTIAL`, or signal outside 863 to 870 MHz | Some hops ignored or wrong hopping frequencies, or SDR overload (images) | Repeat further away; if it stays, check `Primary Domain EU868` in the log and the hop path in the driver |
+| `tentative conn`, then `Bad sync, aborting`; RX scoreboard `RR____...` | The radios are on different frequencies after a hop | A build without the `SetFrequencyReg()` fix ([1.8](#18-driver-fixes-from-the-first-hardware-run)) |
+| 200Hz or D50: uplink fine, but TX `lq 0` down | Telemetry turnaround too tight (known issue) | Use 100Hz Full or slower for downlink tests |
 | Build ends with `[FAILED]` and `.sconsign311.dblite: No such file` | PlatformIO cleaned the build folder after a flag change | Run the same command again |
+| esptool stops with `StopIteration` right after `Stub running...` | The old esptool v4.2.1 in `src\python\external` | Use `$esptool` (PlatformIO's v4.9.0), as in 2.3 |
 | esptool cannot connect | Automatic reset into the bootloader failed | The BOOT button steps in 2.3 |
 
 With a multimeter, oscilloscope or logic analyser:
@@ -547,4 +664,4 @@ Remove-Item super_defines.txt
 Remove-Item Env:PLATFORMIO_BUILD_FLAGS, Env:ELRS_UNIFIED_CONFIG -ErrorAction SilentlyContinue
 ```
 
-Keep the log files in `Docs\hwtest\logs` for the results. Then decide whether the debug changes in section 1.5 stay, before the branch is committed.
+Keep the log files in `Docs\hwtest\logs` for the results. Then decide whether the debug changes in section 1.5 stay (see the `git revert` note there).
